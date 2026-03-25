@@ -1,42 +1,68 @@
-import streamlit as st
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
-# --- SAYFA AYARLARI ---
-st.set_page_config(page_title="AritmaPlus+", layout="centered")
+app = Flask(__name__)
+# Veritabanı dosyası oluşturur
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///aritma_isletme.db'
+db = SQLAlchemy(app)
 
-# --- VERİ SAKLAMA ---
-if 'musteriler' not in st.session_state:
-    st.session_state.musteriler = []
+# --- VERİTABANI MODELLERİ ---
 
-st.title("💧 ArıtmaPlus+ Takip")
+class Stok(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    parca_adi = db.Column(db.String(100), unique=True, nullable=False)
+    adet = db.Column(db.Integer, default=0)
 
-# --- SEKMELER ---
-tab1, tab2 = st.tabs(["➕ Yeni Kayıt", "🔧 Servis Listesi"])
+class Musteri(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ad_soyad = db.Column(db.String(100), nullable=False)
+    telefon = db.Column(db.String(20))
+    # Konum bilgisi (Enlem, Boylam)
+    konum_lat = db.Column(db.Float)
+    konum_lng = db.Column(db.Float)
+    kayit_tarihi = db.Column(db.DateTime, default=datetime.utcnow)
 
-with tab1:
-    with st.form("kayit"):
-        ad = st.text_input("Müşteri Adı")
-        tel = st.text_input("Telefon (Örn: 5321112233)")
-        adres = st.text_area("Adres (Navigasyon için)")
-        if st.form_submit_button("KAYDET"):
-            if ad and tel:
-                st.session_state.musteriler.append({"ad": ad, "tel": tel, "adres": adres})
-                st.success("Kayıt Başarılı!")
+# --- API ROTARI (İŞLEMLER) ---
 
-with tab2:
-    if not st.session_state.musteriler:
-        st.info("Kayıtlı müşteri yok.")
+# 1. ADMIN: STOK GÜNCELLEME
+@app.route('/admin/stok_ekle', methods=['POST'])
+def stok_ekle():
+    data = request.json
+    item = Stok.query.filter_by(parca_adi=data['parca_adi']).first()
+    
+    if item:
+        item.adet = data['yeni_adet']
     else:
-        for m in st.session_state.musteriler:
-            with st.expander(f"👤 {m['ad']}"):
-                st.write(f"📞 Tel: {m['tel']}")
-                st.write(f"📍 Adres: {m['adres']}")
-                
-                # --- NAVİGASYON ---
-                # En basit Google Maps linki
-                maps_link = f"https://google.com{m['adres']}".replace(" ", "+")
-                st.link_button("📍 YOL TARİFİ", maps_link)
-                
-                # --- WHATSAPP ---
-                # En basit WhatsApp linki
-                wa_link = f"https://wa.me{m['tel']}"
-                st.link_button("🟢 WHATSAPP", wa_link)
+        item = Stok(parca_adi=data['parca_adi'], adet=data['yeni_adet'])
+        db.session.add(item)
+    
+    db.session.commit()
+    return jsonify({"mesaj": f"{item.parca_adi} stoğu güncellendi. Yeni adet: {item.adet}"})
+
+# 2. PERSONEL: MÜŞTERİ VE KONUM KAYDI
+@app.route('/personel/musteri_kaydet', methods=['POST'])
+def musteri_kaydet():
+    data = request.json
+    yeni_musteri = Musteri(
+        ad_soyad=data['ad_soyad'],
+        telefon=data.get('telefon'),
+        konum_lat=data['lat'], # Telefondan gelen GPS verisi
+        konum_lng=data['lng']
+    )
+    db.session.add(yeni_musteri)
+    db.session.commit()
+    return jsonify({"mesaj": "Müşteri konumuyla birlikte kaydedildi!"})
+
+# 3. GENEL: STOKLARI GÖRÜNTÜLE
+@app.route('/stok_durumu', methods=['GET'])
+def stok_durumu():
+    stoklar = Stok.query.all()
+    sonuc = {s.parca_adi: s.adet for s in stoklar}
+    return jsonify(sonuc)
+
+# Veritabanını oluştur ve başlat
+if __name__ == '__main__':
+    with app.app_context():
+        db.create_all()
+    app.run(debug=True)
