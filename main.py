@@ -67,6 +67,75 @@ if st.session_state.user_role:
                 st.session_state.stok[u_sec] += u_mik
                 st.rerun()
 
+   import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
+import urllib.parse
+
+# --- KURUMSAL AYARLAR ---
+st.set_page_config(page_title="ArıtmaPlus+ Kurumsal", layout="wide", page_icon="💧")
+
+# --- GİRİŞ VE YETKİLENDİRME SİSTEMİ ---
+if 'user_role' not in st.session_state:
+    st.session_state.user_role = None  # Admin veya Personel
+
+def login():
+    st.sidebar.title("🔐 Personel Girişi")
+    user = st.sidebar.text_input("Kullanıcı Adı")
+    pw = st.sidebar.text_input("Şifre", type="password")
+    if st.sidebar.button("Giriş Yap"):
+        if user == "admin" and pw == "1234":
+            st.session_state.user_role = "Admin"
+        elif user == "teknik" and pw == "5678":
+            st.session_state.user_role = "Personel"
+        else:
+            st.sidebar.error("Hatalı Giriş!")
+
+# --- VERİ TABANI SİMÜLASYONU ---
+if 'data' not in st.session_state:
+    st.session_state.data = []
+if 'stok' not in st.session_state:
+    st.session_state.stok = {"5'li Set": 100, "Membran": 50, "Musluk": 20}
+
+# --- ANA PROGRAM ---
+login()
+
+if st.session_state.user_role:
+    st.title(f"💧 ArıtmaPlus+ | Yetki: {st.session_state.user_role}")
+    
+    # Görseldeki gibi Modüler Sekmeler
+    tabs = ["👥 Müşteri İşlemleri", "📦 Ürün & Stok", "🛠 Bakım & Servis", "🛡 Yetki Paneli"]
+    tab1, tab2, tab3, tab4 = st.tabs(tabs)
+
+    # 1. MÜŞTERİ İŞLEMLERİ
+    with tab1:
+        st.subheader("Yeni Müşteri ve Cihaz Tanımlama")
+        with st.form("musteri_ekle"):
+            c1, c2 = st.columns(2)
+            ad = c1.text_input("Müşteri Ad Soyad")
+            tel = c1.text_input("Telefon")
+            adres = c2.text_area("Navigasyon Adresi")
+            cihaz = c2.selectbox("Cihaz Tipi", ["5 Aşamalı", "6 Aşamalı Alkalin", "Endüstriyel"])
+            if st.form_submit_button("Müşteriyi Kaydet"):
+                st.session_state.data.append({"ad": ad, "tel": tel, "adres": adres, "cihaz": cihaz, "tarih": datetime.now()})
+                st.success("Müşteri Sisteme İşlendi.")
+
+    # 2. ÜRÜN VE STOK (Görseldeki Ürün Listesi Mantığı)
+    with tab2:
+        st.subheader("Depo ve Stok Yönetimi")
+        cols = st.columns(3)
+        for i, (urun, adet) in enumerate(st.session_state.stok.items()):
+            cols[i%3].metric(urun, f"{adet} Adet")
+        
+        if st.session_state.user_role == "Admin":
+            st.divider()
+            st.write("🔧 **Stok Düzenleme (Sadece Admin)**")
+            u_sec = st.selectbox("Ürün", list(st.session_state.stok.keys()))
+            u_mik = st.number_input("Miktar", value=0)
+            if st.button("Stoku Güncelle"):
+                st.session_state.stok[u_sec] += u_mik
+                st.rerun()
+
     # 3. BAKIM VE SERVİS (Navigasyon ve WhatsApp Entegre)
     with tab3:
         st.subheader("Günlük Teknik Servis Planı")
@@ -79,6 +148,21 @@ if st.session_state.user_role:
                 # WhatsApp Linki
                 wa_url = f"https://wa.me{m['tel']}?text=Merhaba, servis için yoldayız."
                 col_b.link_button("🟢 WhatsApp'tan Bildir", wa_url, use_container_width=True)
+
+    # 4. YETKİ PANELİ (Gönderdiğin Görseldeki Ekran)
+    with tab4:
+        if st.session_state.user_role == "Admin":
+            st.subheader("Personel Yetki Tanımlamaları")
+            st.info("Görseldeki 'Yetki İşlemleri' ekranı burada simüle edilmiştir.")
+            st.checkbox("Müşteri Listesini Görüntüle", value=True)
+            st.checkbox("Ürün Düzenleme Yetkisi", value=False)
+            st.checkbox("Bakım Kaydı Silme Yetkisi", value=False)
+            st.button("Yetkileri Kaydet")
+        else:
+            st.warning("Bu alana erişim yetkiniz yok!")
+
+else:
+    st.info("Lütfen sol taraftaki panelden giriş yapınız.")
 
     # 4. YETKİ PANELİ (Gönderdiğin Görseldeki Ekran)
     with tab4:
